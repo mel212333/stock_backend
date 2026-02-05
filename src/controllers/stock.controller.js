@@ -1,5 +1,5 @@
-const { sequelize } = require("../models");
-const { StockMove } = require("../models");
+const { sequelize, StockMove } = require("../models");
+
 
 // stock actual por producto (sum IN - OUT)
 exports.current = async (req, res) => {
@@ -42,10 +42,24 @@ async function getStockForProduct(product_id) {
   return Number(rows?.[0]?.stock || 0);
 }
 
-// crear movimiento (valida OUT no quede negativo)
+
+async function getStockForProduct(product_id) {
+  const [rows] = await sequelize.query(
+    `
+    SELECT
+      COALESCE(SUM(CASE WHEN move_type='IN' THEN qty ELSE 0 END),0)
+    - COALESCE(SUM(CASE WHEN move_type='OUT' THEN qty ELSE 0 END),0) AS stock
+    FROM stock_moves
+    WHERE product_id = :product_id
+    `,
+    { replacements: { product_id } }
+  );
+  return Number(rows?.[0]?.stock || 0);
+}
+
 exports.createMove = async (req, res) => {
   try {
-    const { product_id, move_type, qty, requester_id, sector_id, notes, occurred_at } = req.body;
+    const { product_id, move_type, qty, notes, occurred_at } = req.body;
 
     if (!product_id || !move_type || !qty) {
       return res.status(400).json({ error: "product_id, move_type, qty requeridos" });
@@ -59,13 +73,7 @@ exports.createMove = async (req, res) => {
       return res.status(400).json({ error: "qty inválido" });
     }
 
-    // ✅ ACÁ VA ESTO (ANTES de validar stock)
-    if (move_type === "OUT" && !requester_id && !sector_id) {
-      return res.status(400).json({
-        error: "En una salida (OUT) debes indicar sector_id o requester_id",
-      });
-    }
-
+    // ✅ si es OUT, validar que no quede stock negativo
     if (move_type === "OUT") {
       const stock = await getStockForProduct(product_id);
       if (stock < qtyNum) {
@@ -73,23 +81,25 @@ exports.createMove = async (req, res) => {
       }
     }
 
+    // ✅ NO exigimos sector_id ni requester_id
     const move = await StockMove.create({
       product_id,
       move_type,
       qty: qtyNum,
-      requester_id: requester_id || null,
-      sector_id: sector_id || null,
       user_id: req.user.id,
       occurred_at: occurred_at ? new Date(occurred_at) : new Date(),
       notes: notes || null,
+      sector_id: null,
+      requester_id: null,
     });
 
-    res.status(201).json(move);
+    return res.status(201).json(move);
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: "Error creando movimiento" });
+    return res.status(500).json({ error: "Error creando movimiento" });
   }
 };
+
 
 
 exports.history = async (req, res) => {
