@@ -1,6 +1,47 @@
 const { Product } = require("../models");
 const { Op } = require("sequelize");
 
+
+// PUT /api/products/:id
+exports.update = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { name, unit, stock_min, active } = req.body;
+
+    const product = await Product.findByPk(id);
+    if (!product) return res.status(404).json({ error: "Producto no encontrado" });
+
+    if (name != null) product.name = String(name).trim();
+    if (unit != null) product.unit = String(unit).trim();
+    if (stock_min != null) product.stock_min = Number(stock_min);
+    if (active != null) product.active = Boolean(active);
+
+    await product.save();
+    return res.json(product);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Error editando producto" });
+  }
+};
+
+// DELETE /api/products/:id  (desactiva)
+exports.remove = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    const product = await Product.findByPk(id);
+    if (!product) return res.status(404).json({ error: "Producto no encontrado" });
+
+    product.active = false;
+    await product.save();
+
+    return res.json({ ok: true, message: "Producto desactivado" });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Error desactivando producto" });
+  }
+};
+
 // GET /api/products?q=
 exports.list = async (req, res) => {
   try {
@@ -54,5 +95,22 @@ exports.create = async (req, res) => {
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: "Error creando producto" });
+  }
+
+  
+};
+
+exports.activate = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const product = await Product.findByPk(id);
+    if (!product) return res.status(404).json({ error: "Producto no encontrado" });
+
+    product.active = true;
+    await product.save();
+    res.json(product);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Error activando producto" });
   }
 };
